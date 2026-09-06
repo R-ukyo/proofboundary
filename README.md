@@ -1,114 +1,112 @@
-# ProofBoundary — Verified / TCB split TODO API (PoC)
+# ProofBoundary — Verified / TCB 分離 TODO API（PoC）
 
-Question under test: **can AI-generated application code be treated as
-mechanically-verified code, limiting human review to a small TCB?**
+検証したい問い: **AIが生成するアプリケーションコードを機械的に検証可能なコードとして扱い、人間がレビューすべきコードを小さなTCBだけに限定できるか。**
 
-This repo does not try to be a good web app. It tries to make one thing
-unambiguous: *what is proved, what is merely trusted, and how the machine
-checks the difference.* See [`DESIGN.md`](DESIGN.md) for the decisions taken
-before implementation.
+このリポジトリは良いWebアプリを目指していません。目指すのは一点のみです。
+すなわち、**何が証明されていて、何が単なる信頼なのか、そしてその違いを機械がどう検査するのか**を曖昧さなく示すことです。
+実装前に固めた判断は [`DESIGN.md`](DESIGN.md) にあります。
 
-## Quickstart (host needs only Docker + Compose)
+## 準備（ホストに必要なのは Docker + Compose のみ）
 
 ```bash
 docker compose build
-docker compose up            # API on http://localhost:3000 (PostgreSQL inside compose)
-docker compose run --rm app npm run verify   # full verification (CI entrypoint)
-docker compose run --rm app npm test          # tests only
+docker compose up            # APIは http://localhost:3000（PostgreSQLはcompose内）
+docker compose run --rm app npm run verify   # フル検証（CIの入口）
+docker compose run --rm app npm test          # テストのみ
 docker compose run --rm app npm run metrics   # Verified LOC vs TCB LOC
 ```
 
-`make verify | make test | make up` wraps the same commands (optional).
+`make verify | make test | make up` でも同じ操作ができます（任意のラッパーです）。
 
 ```bash
 curl -X POST localhost:3000/todos -H 'content-type: application/json' -d '{"title":"first"}'
 curl localhost:3000/todos
-ID=<id from above>
+ID=<上で得たid>
 curl -X POST localhost:3000/todos/$ID/complete
 ```
 
-## Architecture
+## アーキテクチャ
 
 ```text
 HTTP JSON
-  ↓  parse (unknown bytes)
-TCB adapter (src/tcb/http/server.ts)
-  ↓  runtime validation (zod: unknown → trusted domain value)
-Verified Use Case (src/verified/usecases/todos.ts)
-  ↓  pure domain call + Port call
-Repository Contract (src/verified/contracts/todoRepository.ts — interface only)
-  ↓  TCB DB adapter (src/tcb/db/pgTodoRepository.ts)
+  ↓  パース（正体不明のバイト列）
+TCBアダプタ (src/tcb/http/server.ts)
+  ↓  実行時検証（zod: unknown → 信頼済みドメイン値）
+Verifiedユースケース (src/verified/usecases/todos.ts)
+  ↓  純粋ドメイン呼び出し ＋ Port呼び出し
+リポジトリContract (src/verified/contracts/todoRepository.ts — interfaceのみ）
+  ↓  TCB DBアダプタ (src/tcb/db/pgTodoRepository.ts)
 PostgreSQL
 ```
 
-Which file is Verified and which is TCB is decided **mechanically**:
-everything under `src/verified/**` must pass the subset + boundary checkers;
-everything else application-side is TCB by construction.
+どのファイルがVerifiedでどれがTCBかは**機械的に判定**します。
+`src/verified/**` 配下はすべてサブセット検査＋境界検査を通過しなければならず、
+それ以外のアプリケーション側は構造上すべてTCBになります。
 
-## Trust model
+## 信頼モデル
 
-| Area | Files | Guarantee |
+| 領域 | ファイル | 保証内容 |
 |---|---|---|
-| Verified Tier 1 (SMT-proved) | `src/verified/domain/todo.ts` | Contracts proved for **all** inputs by Z3 (UNSAT) |
-| Verified Tier 2 (checked + tested) | `src/verified/contracts/`, `src/verified/usecases/` | Subset + boundary checked, unit tested; persistence **assumed** via the Port |
-| TCB (trusted, human-reviewed) | `src/tcb/**`, `tools/**` | Kept small, logic-free; listed below |
-| Trusted infrastructure | Node.js, PostgreSQL, `pg`, `zod`, `z3-solver`, `tsc` | Assumed correct (see Non-guarantees) |
+| Verified Tier 1（SMTで証明） | `src/verified/domain/todo.ts` | ContractをZ3が**全入力**について証明（UNSAT） |
+| Verified Tier 2（検査＋テスト） | `src/verified/contracts/`、`src/verified/usecases/` | サブセット＋境界検査済み、単体テスト済み。永続化はPort経由で**仮定** |
+| TCB（信頼、人手レビュー対象） | `src/tcb/**`、`tools/**` | 小さく、ロジックなしに保つ。下表に列挙 |
+| 信頼する基盤 | Node.js、PostgreSQL、`pg`、`zod`、`z3-solver`、`tsc` | 正しいと仮定（非保証を参照） |
 
-Verified Code reaches the outside world only through the Port
-(`TodoRepository`); TCB never makes business decisions (no `if
-(todo.completed)` outside Verified Code — the HTTP layer only maps use-case
-results to status codes).
+Verified Codeが外界に触れる経路はPort（`TodoRepository`）のみです。
+TCB側では業務判断を行いません（Verified Codeの外に `if
+(todo.completed)` は存在しない——HTTP層はユースケース結果をステータスコード
+に対応付けるだけです）。
 
-## Verification guarantee
+## 検証保証
 
-For `createTodo`: any input with `1 <= title.length <= 200` produces output
-with identical `id`/`title` and `completed == false`. For `completeTodo`: any
-input with `completed == false` produces output with identical `id`/`title`
-and `completed == true`. Field preservation is part of the proved
-postcondition, not just the flag flip. The prover checks
-`Pre ∧ output=Impl ∧ ¬Post` for satisfiability over Z3's String/Bool/Int
-theories; UNSAT = holds for all inputs. SAT = prints input/output values from
-the model as a counterexample (see sample output in `npm run verify`).
+`createTodo` について: `1 <= title.length <= 200` を満たす任意の入力に対し、
+出力の `id`／`title` は入力と同一で `completed == false` になる。
+`completeTodo` について: `completed == false` の任意の入力に対し、出力の
+`id`／`title` は入力と同一で `completed == true` になる。フラグ反転だけでなく
+**フィールド保存も**証明対象の postcondition に含まれます。証明器は
+`Pre ∧ output=Impl ∧ ¬Post` の充足可能性をZ3のString/Bool/Int理論上で問い合わせます。
+UNSAT＝全入力で成立、SAT＝モデルから得た入出力値を counterexample として表示します
+（`npm run verify` の出力例を参照）。
 
-What each `npm run verify` step guarantees:
+`npm run verify` の各段階が保証するもの:
 
-1. **Type check** (`tsc`) — the whole tree is well-typed (necessary, not sufficient).
-2. **Verified subset** — Verified files use only the translatable fragment
-   (no `any`/`as`/`!`/`throw`/loops/`await` outside usecases, no closures…).
-3. **Import boundaries** — Verified files import nothing outside
-   `src/verified/**` (no `pg`/`zod`/`node:*`/globals).
-4. **Boundary self-test** — the checkers are tested against injected
-   violations (`zod` smuggling, `fetch`, `as`-cast); blind checkers fail the build.
-5. **Contract verification** — Z3 proofs for both functions **plus**
-   rejection of `fixtures/invalid/*` (known-bad implementations must NOT prove).
-6. **Tests** — runtime behavior of domain, use cases (fake Port), and HTTP mapping.
+1. **型検査**（`tsc`）——ツリー全体が型正しいこと（必要条件であり十分条件ではない）。
+2. **Verifiedサブセット検査**——Verifiedファイルが翻訳可能な断片のみを使うこと
+   （`any`／`as`／`!`／`throw`／ループ／usecases外での`await`／クロージャ等を禁止）。
+3. **import境界検査**——Verifiedファイルが `src/verified/**` の外をimportしないこと
+   （`pg`／`zod`／`node:*`／グローバル変数を禁止）。
+4. **境界セルフテスト**——検査器自体を、注入した違反（`zod`密輸、`fetch`、`as`キャスト）
+   でテストする。見逃す検査器はビルド失敗になる。
+5. **Contract検証**——2関数のZ3証明に加え、`fixtures/invalid/*`
+   （意図的不正実装）が証明**されない**ことを要求する。
+6. **テスト**——ドメイン、ユースケース（Portの偽実装使用）、HTTP対応付けの実行時挙動。
 
-## Non-guarantees (explicit assumptions)
+## 非保証（明示する仮定）
 
-- PostgreSQL stores/returns rows faithfully; `pg` maps them correctly.
-- The TCB adapter implements the Port contract (`save` persists exactly what
-  it receives); zod schemas match the domain predicates (`min(1).max(200)`).
-- Node.js / HTTP transport is faithful; `z3-solver` (Z3 WASM) answers correctly.
-- `tsc` parsing used by the checkers/prover is correct.
-- The formal postconditions capture what the natural-language requirement means.
+- PostgreSQLが行を正しく保存・返却すること。`pg` が正しくマッピングすること。
+- TCBアダプタがPortのContractを実装していること（`save` は受け取ったものをそのまま永続化する）。
+  zodスキーマがドメイ述語と一致していること（`min(1).max(200)`）。
+- Node.js／HTTP転送が忠実であること。`z3-solver`（Z3 WASM）が正しく判定すること。
+- 検査器・証明器が使う `tsc` のパースが正しいこと。
+- 形式 postcondition が自然言語の要求の意味を捉えていること。
 
-## TCB (complete application-side list)
+## TCB（アプリケーション側の全ファイル）
 
 ```text
-src/tcb/http/server.ts            # routing, body parsing, status mapping (no business rules)
-src/tcb/validation/todoSchemas.ts # zod boundary: unknown → domain value
-src/tcb/db/pgTodoRepository.ts    # Port implementation (mapping trusted, not proved)
+src/tcb/http/server.ts            # ルーティング、ボディパース、状態対応付け（業務規則なし）
+src/tcb/validation/todoSchemas.ts # zod境界: unknown → ドメイン値
+src/tcb/db/pgTodoRepository.ts    # Port実装（対応付けは信頼対象であり証明対象外）
 src/tcb/db/schema.ts              # DDL
-src/tcb/runtime/main.ts           # env, pool, listen
-tools/verifier/verify.mjs         # AST→Z3 prover (trusted to encode faithfully)
-tools/checks/subset.mjs           # subset checker (trusted)
-tools/checks/boundary.mjs         # boundary checker (trusted)
-tools/checks/selftest.mjs         # checker self-test
-tools/verify-all.mjs              # pipeline wiring
-tools/metrics/metrics.mjs         # LOC counting
+src/tcb/runtime/main.ts           # 環境変数、プール、listen
+tools/verifier/verify.mjs         # AST→Z3証明器（忠実な符号化を信頼）
+tools/checks/subset.mjs           # サブセット検査器（信頼）
+tools/checks/boundary.mjs         # 境界検査器（信頼）
+tools/checks/selftest.mjs         # 検査器セルフテスト
+tools/verify-all.mjs              # パイプライン配線
+tools/metrics/metrics.mjs         # LOC計測
 ```
 
-## Measured trust size (`npm run metrics`)
+## 信頼サイズの測定（`npm run metrics`）
 
 ```text
 Application code: 238 LOC
@@ -117,44 +115,36 @@ TCB:              169 LOC
 TCB ratio:         71.0%
 ```
 
-The ratio looks inverted for a 3-endpoint toy because TCB is almost entirely
-*fixed* infrastructure (HTTP parsing, SQL mapping) while Verified grows with
-business rules. The operational claim is marginal: adding domain logic adds ~0
-TCB. Shrinking the fixed part further means shared libraries / generated
-adapters (see evaluation §8), not hand-smaller handlers — switching to a web
-framework would *reduce* this number while *increasing* actual trust, which is
-why the metric counts only first-party `src/` code and frameworks stay out.
+3エンドポイントの玩具規模では比率が逆転して見えます。これはTCBがほぼ**固定の
+インフラ分**（HTTPパース、SQL対応付け）であり、Verifiedが業務規則とともに伸びるためです。
+運用上の主張は限界費用にあります。すなわち、ドメインロジック追加時のTCB増加はほぼゼロです。
+固定部分の更なる縮小は、ハンドラの手書き削減ではなく、共有ライブラリ化・生成アダプタ化で
+行うべきです（下記評価§8）。Webフレームワーク導入はこの数値を「改善」させますが実際の信頼は
+増えるため、計測は自前の `src/` のみを対象にし、フレームワークは除外しています。
 
-## Evaluation (the 10 questions)
+## 評価（10問への回答）
 
-1. **Which TypeScript fragment verified realistically?** Pure first-order
-   functions over `{string, boolean, number}` object shapes with `===`, `&&`,
-   `||`, `!`, ternaries, and string `.length`. Enough for state transitions and
-   constructors — the core of CRUD business logic.
-2. **Subset constraints needed?** Total ban on `any`/`unknown`/`as`/`!`,
-   I/O, async (domain tier), loops, exceptions, closures, classes, dynamic
-   access, and all bare imports. Fail-closed translation: anything unmodelable
-   is an error, never silently skipped.
-3. **What remained in the TCB?** HTTP parsing/routing, zod validation, the pg
-   adapter + DDL, process wiring, and the verifier toolchain itself.
-4. **What share?** 71% here (fixed-cost dominated; see above).
-5. **Can humans skip reading Verified diffs?** For Tier 1 pure functions: yes,
-   *provided* the human still reviews the Requires/Ensures specs — the proof
-   is relative to them. That is the correct division of labor: humans review
-   *what should hold*, machines check *that it holds for all inputs*.
-6. **What still needs humans?** Specs, the TCB files, schema↔predicate
-   correspondence (zod bounds vs `Requires`), and the Port assumption.
-7. **How dangerous is the DB assumption?** Contained: the adapter is ~36 LOC of
-   straight-line mapping with no branching; the risky part (SQL generation) is
-   delegated to `pg` parameter binding, and row shapes are re-validated with
-   zod on read.
-8. **How to shrink TCB further?** Generate the HTTP+validation+adapter layer
-   from the Verified interfaces (one generator = one review), or share one
-   audited CRUD runtime across services.
-9. **Biggest obstacle to real adoption?** Spec authorship: writing precise
-   pre/postconditions for rich domains, and keeping runtime validators in sync
-   with domain predicates (today trusted by inspection).
-10. **AI generate → counterexample → repair loop?** Yes — this PoC already
-    produces the required signal: machine-readable verdict + concrete
-    input/output counterexample (see mutation output). The next step is feeding
-    that text back to a generator; no new verification machinery is needed.
+1. **TypeScriptのどの範囲が現実的に機械検証できたか。** `{string, boolean, number}`
+   のオブジェクト形状に対する一階の純粋関数（`===`、`&&`、`||`、`!`、三項演算子、文字列
+   `.length`）。状態遷移とコンストラクタ、すなわちCRUD業務ロジックの中核には十分でした。
+2. **Verifiedサブセットに必要だった制約は。** `any`／`unknown`／`as`／`!`、I/O、
+   async（ドメイン層）、ループ、例外、クロージャ、クラス、動的アクセス、ベアimportの全面禁止。
+   翻訳はfail-closedです。モデル化できないものは黙って通さず必ずエラーにします。
+3. **TCBに最終的に何が残ったか。** HTTPパース／ルーティング、zod検証、pgアダプタ＋DDL、
+   プロセス配線、そして検証器ツールチェーン自体です。
+4. **TCB比率は。** 71%（固定費支配。上記参照）。
+5. **Verified Code変更時に人間がdiffを読まなくてよいか。** Tier 1の純粋関数についてははい、
+   **ただし**人間はRequires/Ensuresの仕様を引き続きレビューします。証明は仕様に対する相対的なものだからです。
+   これが正しい分業です。人間は「何が成り立つべきか」をレビューし、機械は「全入力で成り立つこと」を検査します。
+6. **まだ人間が確認する必要があるものは。** 仕様、TCBファイル、スキーマと述語の対応
+  （zodの境界値と `Requires`）、Portの仮定です。
+7. **DB Contractの仮定はどの程度危険か。** 封じ込められています。アダプタは分岐なし約36行の
+   素直な対応付けであり、危険な部分（SQL生成）は `pg` のパラメータ束縛に委譲し、読み出し行形状は
+   zodで再検証しています。
+8. **TCBをさらに縮小するには。** Verified interface からHTTP＋検証＋アダプタ層を**生成**する
+   （生成器1個のレビューで済む）、または監査済みCRUDランタイムをサービス間で共有します。
+9. **実開発への拡張で最大の障害は。** 仕様記述の執筆コストです。リッチなドメインに対する精密な
+   pre/postcondition の作成と、実行時バリデータとドメイン述語の同期維持（現状は目視で信頼）が課題です。
+10. **AI生成→counterexample→自己修正ループに発展できるか。** はい。このPoCは既に必要な信号を
+    出しています。すなわち機械可読な合否＋具体的な入出力 counterexample（mutation出力を参照）です。
+    次の段階はそのテキストを生成器に返すことであり、新しい検証機構は不要です。

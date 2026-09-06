@@ -1,60 +1,94 @@
-# DESIGN MEMO — Verified / TCB split PoC (TODO API)
+# 設計メモ — Verified / TCB 分離 PoC（TODO API）
 
-Date: 2026-09-06. Decided before implementation. This memo is the spec; code must follow it.
+日付: 2026-09-06。実装前に決定した。本メモが仕様であり、コードはこれに従う。
 
-## 1. Verified subset (machine-enforced)
+## 1. Verifiedサブセット（機械的に強制）
 
-Location: `src/verified/**` only. Rule: **if it can't be translated to SMT, it doesn't belong here.**
+対象: `src/verified/**` のみ。原則: **SMTに翻訳できないものはここに置けない。**
 
-Allowed:
-- `interface` / `type` with fields of `string | boolean | number` only (+ branded string via intersection is NOT allowed — keep plain).
-- `export function f(args: T): U { ... }` — sync only, single `return` (plus `const` bindings of pure exprs before it).
-- Pure expressions only: object literals `{...}`, spread `...x`, property access `a.b`, `===`, `!==`, `&&`, `||`, `!`, literals, ternary `?:`, string `.length`, comparisons `< <= > >=` on numbers.
-- Relative imports from `src/verified/**` only (`import type` or value import of pure helpers). No bare-specifier imports at all.
+許可:
+- フィールドが `string | boolean | number` のみの `interface`／`type`。
+- `export function f(args: T): U { ... }` ——同期のみ、単一 `return`（直前に純粋式の `const`束縛可）。
+- 純粋式のみ: オブジェクトリテラル `{...}`、スプレッド `...x`、プロパティアクセス `a.b`、
+  `===`、`!==`、`&&`、`||`、`!`、リテラル、三項演算子 `?:`、文字列 `.length`、数値比較 `< <= > >=`。
+- `src/verified/**` 内の相対importのみ（`import type` または純粋ヘルパーの値import）。ベア指定子のimportは全面禁止。
 
-Denied (subset checker fails the build):
-- `any`, `unknown`, `as`, `!` (non-null assertion), `eval`, `Function`, `Proxy`, `Reflect`
-- `async`/`await`, `Promise`, `throw`/`try`/`catch`, `for`/`while`/`do`, `let`/`var` reassignment (only `const`), `class`/`this`/`new` (except none), `enum`
-- `fetch`, `process`, `fs`, `path`, `console`, `Date.now`, `Math.random`, `crypto`, `setTimeout`
-- Dynamic access `a[b]`, `Object.keys/assign`, spread of `any`, recursion (function calling itself), default mutable exports (`let` at top level)
-- Bare imports: `pg`, `hono`, `express`, `fastify`, `zod`, `@prisma/*`, `drizzle*`, any `node:*` — entire bare-import list is denied in verified/.
+禁止（サブセット検査でビルド失敗）:
+- `any`、`unknown`、`as`、`!`（non-null assertion）、`eval`、`Function`、`Proxy`、`Reflect`
+- `async`／`await`、`Promise`、`throw`／`try`／`catch`、`for`／`while`／`do`、
+  `let`／`var` 再代入（`const` のみ）、`class`／`this`／`new`、`enum`
+- `fetch`、`process`、`fs`、`path`、`console`、`Date.now`、`Math.random`、`crypto`、`setTimeout`
+- 動的アクセス `a[b]`、`Object.keys/assign`、`any` のスプレッド、再帰、トップレベルの可変export（`let`）
+- ベアimport: `pg`、`hono`、`express`、`fastify`、`zod`、`@prisma/*`、`drizzle*`、`node:*` ——
+  Verified内のベアimportはすべて禁止。
 
-Rationale: this subset maps 1:1 onto Z3 theories (Bool, String, Ints for lengths). Anything else is rejected rather than silently unmodeled.
-ESLint-level vs solver-level split: syntax/ban rules = AST checker (fast, no solver); semantic contract validity = Z3 (needs solver).
+理由: このサブセットはZ3理論（Bool、String、長さ用Int）に1対1で対応する。
+それ以外は黙って未モデル化にせず拒否する。
+ESLint的水準とソルバー水準の切り分け: 構文・禁止規則＝AST検査器（高速、ソルバー不要）、
+Contractの意味的妥当性＝Z3（ソルバー必須）。
 
-## 2. TCB boundary
+## 2. TCB境界
 
-- Verified (`src/verified/`): `domain/todo.ts` (types + `createTodo`, `completeTodo` pure fns + `*Requires/*Ensures` spec fns), `contracts/todoRepository.ts` (Port interface only, no impl), `usecases/*.ts` (orchestration over the Port, no I/O primitives — takes Port as argument; async allowed here ONLY to await Port, still no direct imports).
-  - Note: usecases are boundary-checked + type-checked + unit-tested, but SMT-proved only insofar as they call proved pure fns. SMT scope = pure core. This is stated in README as a delimited guarantee, not hidden.
-- TCB (`src/tcb/`): `http/server.ts` (node:http routing, parse/serialize only), `validation/*` (zod schemas: unknown → trusted domain value), `db/pgTodoRepository.ts` (pg adapter implementing the Port), `runtime/*` (env, main, connection wiring). TCB may import `pg`, `zod`, `node:*`. TCB MUST NOT contain business rules (no `if (todo.completed)` decisions — it calls verified usecases).
-- Verifier itself (`tools/verifier/`, `tools/checks/`) is TCB: we trust tsc, the AST checker, z3-solver (Z3 WASM), and Node. Listed in README Assumptions.
-- Mechanical判定: `tools/checks/boundary.mjs` (pure-Node, no deps) scans `src/verified/**` imports/identifiers and fails on any violation. No human judgment involved.
+- Verified（`src/verified/`）: `domain/todo.ts`（型＋純粋関数 `createTodo`／`completeTodo`＋
+  仕様関数 `*Requires`／`*Ensures`）、`contracts/todoRepository.ts`（Portのinterfaceのみ、実装なし）、
+  `usecases/*.ts`（Port上のオーケストレーション。I/Oプリミティブなし——Portを引数で受け取る。
+  Port待ちのためのみ `async` を許可）。
+  - 注意: usecasesは境界検査＋型検査＋単体テストの対象であり、SMT証明の範囲は
+    呼び出す純粋関数までに限る。SMTの適用範囲は純粋コアである。これはREADMEで限定保証として
+    明示し、隠さない。
+- TCB（`src/tcb/`）: `http/server.ts`（node:httpによるルーティング、パース／直列化のみ）、
+  `validation/*`（zodスキーマ: unknown → 信頼済みドメイン値）、`db/pgTodoRepository.ts`
+  （pgアダプタによるPort実装）、`runtime/*`（環境変数、main、接続配線）。TCBは `pg`、`zod`、
+  `node:*` をimportしてよい。TCBに業務規則を書いてはならない（`if (todo.completed)` のような
+  判断はなく、Verifiedユースケースを呼ぶだけ）。
+- 検証器自体（`tools/verifier/`、`tools/checks/`）はTCBである。tsc、AST検査器、
+  z3-solver（Z3 WASM）、Nodeを信頼する。READMEの仮定に列挙する。
+- 機械的判定: `tools/checks/boundary.mjs`（依存なしの素のNode）が `src/verified/**` の
+  import／識別子を走査し、違反があれば失敗させる。人手判断は介在しない。
 
-## 3. Verification mechanism (real SMT, not typecheck theater)
+## 3. 検証機構（型検査の演技ではなく、本物のSMT）
 
-- `tools/verifier/verify.mjs` uses the TypeScript compiler API to parse the ACTUAL `src/verified/domain/todo.ts` source: it extracts (a) each target impl function body, (b) its Requires/Ensures spec function bodies, and translates supported AST nodes to `z3-solver` terms.
-- Theories: Bool + String + Int (string length). `title.length` → `Length(title)`.
-- Query per function: `Pre(input) ∧ output = Impl(input) ∧ ¬Post(input, output)`. `unsat` = proved; `sat` = model evaluated to print `Counterexample: input.../ output...`.
-- The translation is total over the subset: any unsupported AST node → verification ERROR (fail-closed), never skipped. So an AI generating out-of-subset code cannot silently pass.
-- Negative control: `fixtures/invalid/*.ts` are buggy copies (e.g. `completed:false`, `title:""`); `npm run verify` also runs the prover over each fixture and FAILS THE BUILD if any fixture verifies (i.e. the prover must reject known-bad code). This proves detection, not just acceptance.
+- `tools/verifier/verify.mjs` はTypeScriptコンパイラAPIで**実際の**
+  `src/verified/domain/todo.ts` ソースをパースする。対象の実装関数本体と
+  Requires／Ensures仕様関数本体を取り出し、対応するASTノードを `z3-solver` の項に翻訳する。
+- 理論: Bool＋String＋Int（文字列長）。`title.length` → `Length(title)`。
+- 関数ごとの問い: `Pre(input) ∧ output = Impl(input) ∧ ¬Post(input, output)`。
+  `unsat`＝証明成功、`sat`＝モデルを評価して `Counterexample: input.../ output...` を表示する。
+- 翻訳はサブセット上 total である。未対応ASTノードは検証**エラー**（fail-closed）であり、
+  決して読み飛ばさない。したがってサブセット外のコードをAIが生成しても黙って通ることはない。
+- ネガティブコントロール: `fixtures/invalid/*.ts` にバグ入りコピー
+  （例: `completed:false`、`title:""`）を置く。`npm run verify` は各fixtureにも証明器を走らせ、
+  fixtureが検証を**通ったら**ビルド失敗にする（通ることではなく、誤実装の拒否を証明する）。
 
-## 4. SMT solver usage
+## 4. SMTソルバーの利用法
 
-- `z3-solver` npm package (Z3 compiled to WASM, real Z3 decision procedure) inside the `app` Docker image. No host Z3, no network, no Python needed. `Solver.check()` → `sat/unsat`. Models give counterexamples.
-- Alternative considered (system Z3 + SMT-LIB files + Python): rejected — bigger image, harder `npm run verify` single-command story, same solving power for this fragment.
+- Dockerイメージ内の `z3-solver` npmパッケージ（WASMにコンパイルされたZ3、本物のZ3決定手続き）。
+  ホストのZ3不要、ネットワーク不要、Python不要。`Solver.check()` → `sat`／`unsat`。
+  モデルから counterexample を得る。
+- 検討したが不採用: システムZ3＋SMT-LIBファイル＋Python方式。イメージ肥大化に加え
+  `npm run verify` 単一コマンドの筋が悪く、同等の決定能力しか得られないため。
 
-## 5. Docker composition
+## 5. Docker構成
 
-- `Dockerfile`: `node:20-slim`, `npm ci`, copies repo, compiles TS. No host Node/npm/Z3 needed.
-- `compose.yaml`: `app` (built) + `db` (`postgres:16-alpine`, named volume, healthcheck). App connects via `DATABASE_URL`.
-- Commands (all container-side): `docker compose build`, `docker compose up`, `docker compose run --rm app npm run verify|test|metrics`. Makefile wraps the same commands but is optional.
+- `Dockerfile`: `node:20-slim` 基盤、`npm ci`、リポジトリ複写、TSコンパイル。
+  ホストのNode／npm／Z3は不要。
+- `compose.yaml`: `app`（ビルド品）＋ `db`（`postgres:16-alpine`、名前付きボリューム、healthcheck）。
+  接続は `DATABASE_URL` 経由。
+- コマンド（すべてコンテナ側実行）: `docker compose build`、`docker compose up`、
+  `docker compose run --rm app npm run verify|test|metrics`。Makefileは同一コマンドのラッパー（任意）。
 
-## 6. Guarantees (what UNSAT actually means)
+## 6. 保証（UNSATが実際に意味するもの）
 
-- For ALL strings/bools in scope: if `Requires` holds, the implementation's output satisfies `Ensures` — including field-preservation clauses (`output.id == input.id`, `output.title == input.title`), not just `completed == true`.
-- createTodo: valid-title input ⇒ title passthrough + `completed == false` (+ id passthrough).
-- completeTodo: `completed == false` input ⇒ id/title preserved + `completed == true`.
+- 対象範囲内の全文字列・真偽値について: `Requires` が成り立てば、実装の出力は `Ensures` を
+  満たす。`completed == true` だけでなく、フィールド保存条項
+  （`output.id == input.id`、`output.title == input.title`）を含む。
+- createTodo: 有効タイトルの入力 ⇒ タイトル透過 ＋ `completed == false`（＋id透過）。
+- completeTodo: `completed == false` の入力 ⇒ id／タイトル保存 ＋ `completed == true`。
 
-## 7. Non-guarantees (explicit Assumptions)
+## 7. 非保証（明示する仮定）
 
-Postgres behaves correctly; pg driver maps rows faithfully; zod validators match domain predicates; Node/http transport is faithful; z3-solver answers correctly; natural-language requirement ("completed means done") is correctly formalized in Ensures. DB persistence (`save` stores what it's given) is ASSUMED via the Port contract, not proved. Use-case ↔ Port wiring is tested, not SMT-proved.
+Postgresが正しく動作する。pgドライバが行を忠実に対応付ける。zodバリデータがドメイン述語と
+一致する。Node／http転送が忠実である。z3-solverが正しく判定する。
+自然言語の要求（「completedは完了を意味する」）がEnsuresに正しく形式化されている。
+DB永続化（`save` が渡されたものを保存する）はPortのContractによる**仮定**であり、証明しない。
+ユースケースとPortの配線はテスト対象であり、SMT証明対象ではない。
