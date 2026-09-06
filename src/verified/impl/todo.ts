@@ -26,5 +26,5 @@ export function completeTodo(todo: Todo): Todo {
 // --- reopenTodo -------------------------------------------------------------
 
 export function reopenTodo(todo: Todo): Todo {
-  return { id: todo.id, title: todo.title, completed: false };
+  return { ...todo, completed: false };
 }
