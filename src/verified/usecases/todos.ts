@@ -5,7 +5,7 @@
 // duplicate business rules — all state decisions come from domain functions.
 
 import type { NewTodoInput, Todo } from "../specs/todo.js";
-import { completeTodo, createTodo } from "../impl/todo.js";
+import { completeTodo, createTodo, reopenTodo } from "../impl/todo.js";
 import type { TodoRepository } from "../contracts/todoRepository.js";
 
 export interface NotFound {
@@ -14,6 +14,10 @@ export interface NotFound {
 
 export interface AlreadyCompleted {
   readonly kind: "already-completed";
+}
+
+export interface AlreadyOpen {
+  readonly kind: "already-open";
 }
 
 export async function createTodoUseCase(
@@ -44,4 +48,20 @@ export async function completeTodoUseCase(
   const done: Todo = completeTodo(found);
   await repo.save(done);
   return done;
+}
+
+export async function reopenTodoUseCase(
+  repo: TodoRepository,
+  id: string,
+): Promise<Todo | NotFound | AlreadyOpen> {
+  const found: Todo | null = await repo.findById(id);
+  if (found === null) {
+    return { kind: "not-found" };
+  }
+  if (found.completed === false) {
+    return { kind: "already-open" };
+  }
+  const open: Todo = reopenTodo(found);
+  await repo.save(open);
+  return open;
 }
