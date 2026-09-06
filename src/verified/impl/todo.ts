@@ -22,3 +22,9 @@ export function createTodo(input: NewTodoInput): Todo {
 export function completeTodo(todo: Todo): Todo {
   return { id: todo.id, title: todo.title, completed: true };
 }
+
+// --- reopenTodo -------------------------------------------------------------
+
+export function reopenTodo(todo: Todo): Todo {
+  return { id: todo.id, title: todo.title, completed: false };
+}

@@ -5,8 +5,10 @@ import {
   completeTodoRequires,
   createTodoEnsures,
   createTodoRequires,
+  reopenTodoEnsures,
+  reopenTodoRequires,
 } from "../src/verified/specs/todo.js";
-import { completeTodo, createTodo } from "../src/verified/impl/todo.js";
+import { completeTodo, createTodo, reopenTodo } from "../src/verified/impl/todo.js";
 
 describe("createTodo (runtime behavior)", () => {
   it("passes title through and starts uncompleted", () => {
@@ -36,5 +38,21 @@ describe("completeTodo (runtime behavior)", () => {
 
   it("requires an uncompleted todo", () => {
     assert.equal(completeTodoRequires({ id: "x", title: "t", completed: true }), false);
+  });
+});
+
+describe("reopenTodo (runtime behavior)", () => {
+  it("preserves id/title and clears completed", () => {
+    const input = { id: "y", title: "again", completed: true };
+    const out = reopenTodo(input);
+    assert.equal(out.id, "y");
+    assert.equal(out.title, "again");
+    assert.equal(out.completed, false);
+    assert.equal(reopenTodoRequires(input), true);
+    assert.equal(reopenTodoEnsures(input, out), true);
+  });
+
+  it("requires a completed todo", () => {
+    assert.equal(reopenTodoRequires({ id: "y", title: "t", completed: false }), false);
   });
 });
