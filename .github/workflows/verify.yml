@@ -1,0 +1,94 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build app image
+        run: docker compose build app
+
+      - name: Full verification (typecheck, subset, boundary, proofs, tests)
+        run: docker compose run --rm app npm run verify
+
+      - name: Review gate (classify human vs machine change)
+        if: github.event_name == 'pull_request'
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # NOTE: github.base_ref resolves to the stack's ultimate base (main)
+          # for stacked PRs; use the event payload's actual PR base instead.
+          git diff --name-only "origin/${{ github.event.pull_request.base.ref }}...HEAD" > /tmp/changed.txt
+          OUT=$(docker compose run --rm -v /tmp/changed.txt:/tmp/changed.txt app node tools/review-gate/review-gate.mjs --files /tmp/changed.txt)
+          echo "$OUT"
+          if echo "$OUT" | grep -q '^GATE: MACHINE_ONLY'; then
+            echo "verdict=MACHINE_ONLY" >> "$GITHUB_OUTPUT"
+          else
+            echo "verdict=NEEDS_HUMAN" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Label machine-only PRs and enable auto-merge
+        if: github.event_name == 'pull_request' && steps.gate.outputs.verdict == 'MACHINE_ONLY'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          gh label create machine-only --description "No human review needed when pipeline is green" --color 0E8A16 || true
+          gh pr edit "$PR" --add-label machine-only
+          # gh-stack submits PRs as drafts; graduate this one (it is green here).
+          gh pr ready "$PR"
+          # Stack safety: merging a stacked PR cascades to the whole substack
+          # below it, which may contain unreviewed human PRs. Only auto-merge
+          # when this PR is at the bottom of the remaining stack (position 1)
+          # or not stacked at all. Otherwise leave the label as the signal and
+          # merge bottom-up (see docs/REVIEW_POLICY.md).
+          POS=$(gh api "repos/${{ github.repository }}/pulls/$PR" --jq '.stack.position // 1')
+          if [ "$POS" != "1" ]; then
+            echo "stack position is $POS: waiting for the stack below to merge first."
+            exit 0
+          fi
+          # NOTE: gh-stack PRs reject GraphQL merge/auto-merge and the sync
+          # REST merge; use the async merge API (PUT .../merge-async).
+          UUID=$(gh api -X PUT "repos/${{ github.repository }}/pulls/$PR/merge-async" \
+            -f merge_method=squash \
+            -f commit_title="${{ github.event.pull_request.title }} (#$PR)" \
+            --jq '.details.uuid // empty')
+          if [ -z "$UUID" ]; then
+            echo "merge-async did not return a tracking UUID; check the PR manually."
+            exit 1
+          fi
+          for i in $(seq 1 6); do
+            sleep 10
+            STATUS=$(gh api "repos/${{ github.repository }}/pulls/$PR/merge-async/$UUID" --jq '.status')
+            echo "merge status: $STATUS"
+            if [ "$STATUS" = "merged" ]; then
+              exit 0
+            fi
+            if [ "$STATUS" = "failed" ]; then
+              echo "async merge failed; check the PR manually."
+              exit 1
+            fi
+          done
+          echo "merge still pending; it continues in the background."
+
+      - name: Label human-review PRs
+        if: github.event_name == 'pull_request' && steps.gate.outputs.verdict == 'NEEDS_HUMAN'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create needs-human-review --description "Trust-relevant change: human review required" --color D93F0B || true
+          gh pr edit "${{ github.event.pull_request.number }}" --add-label needs-human-review

@@ -49,7 +49,8 @@ PostgreSQL
 
 | 領域 | ファイル | 保証内容 |
 |---|---|---|
-| Verified Tier 1（SMTで証明） | `src/verified/domain/todo.ts` | ContractをZ3が**全入力**について証明（UNSAT） |
+| Verified Tier 1 仕様（人間が読む） | `src/verified/specs/todo.ts` | 「何が成り立つべきか」の定義。変更は要レビュー |
+| Verified Tier 1 実装（SMTで証明） | `src/verified/impl/todo.ts` | ContractをZ3が**全入力**について証明（UNSAT）。緑なら読まない |
 | Verified Tier 2（検査＋テスト） | `src/verified/contracts/`、`src/verified/usecases/` | サブセット＋境界検査済み、単体テスト済み。永続化はPort経由で**仮定** |
 | TCB（信頼、人手レビュー対象） | `src/tcb/**`、`tools/**` | 小さく、ロジックなしに保つ。下表に列挙 |
 | 信頼する基盤 | Node.js、PostgreSQL、`pg`、`zod`、`z3-solver`、`tsc` | 正しいと仮定（非保証を参照） |
@@ -105,16 +106,19 @@ tools/checks/subset.mjs           # サブセット検査器（信頼）
 tools/checks/boundary.mjs         # 境界検査器（信頼）
 tools/checks/selftest.mjs         # 検査器セルフテスト
 tools/verify-all.mjs              # パイプライン配線
+tools/review-gate/review-gate.mjs # 変更分類（MACHINE_ONLY/NEEDS_HUMAN）
 tools/metrics/metrics.mjs         # LOC計測
+.github/workflows/verify.yml     # CI（フル検証＋ゲート＋ラベル＋auto-merge）
+.github/CODEOWNERS                # 信頼パスのレビュア指名
 ```
 
 ## 信頼サイズの測定（`npm run metrics`）
 
 ```text
-Application code: 238 LOC
-Verified:          69 LOC
+Application code: 239 LOC
+Verified:          70 LOC
 TCB:              169 LOC
-TCB ratio:         71.0%
+TCB ratio:         70.7%
 ```
 
 3エンドポイントの玩具規模では比率が逆転して見えます。これはTCBがほぼ**固定の
@@ -134,7 +138,7 @@ TCB ratio:         71.0%
    翻訳はfail-closedです。モデル化できないものは黙って通さず必ずエラーにします。
 3. **TCBに最終的に何が残ったか。** HTTPパース／ルーティング、zod検証、pgアダプタ＋DDL、
    プロセス配線、そして検証器ツールチェーン自体です。
-4. **TCB比率は。** 71%（固定費支配。上記参照）。
+4. **TCB比率は。** 70.7%（固定費支配。上記参照）。
 5. **Verified Code変更時に人間がdiffを読まなくてよいか。** Tier 1の純粋関数についてははい、
    **ただし**人間はRequires/Ensuresの仕様を引き続きレビューします。証明は仕様に対する相対的なものだからです。
    これが正しい分業です。人間は「何が成り立つべきか」をレビューし、機械は「全入力で成り立つこと」を検査します。

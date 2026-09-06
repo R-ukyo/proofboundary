@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import type { Todo } from "../src/verified/domain/todo.js";
+import type { Todo } from "../src/verified/specs/todo.js";
 import type { TodoRepository } from "../src/verified/contracts/todoRepository.js";
 import {
   completeTodoUseCase,

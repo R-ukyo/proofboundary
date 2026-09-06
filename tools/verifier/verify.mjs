@@ -258,11 +258,40 @@ function makeTranslator(ctx, mod, constLits, tag) {
 
 // ------------------------------------------------------------------ proof
 
-async function proveFile(ctx, filePath, tag) {
-  const mod = parseModule(filePath);
+// A "program" is specs + impl merged. For the real tree these are two files
+// (src/verified/specs/*.ts + src/verified/impl/*.ts); fixtures stay single-file.
+// Duplicate definitions across the two files are a hard error (fail-closed:
+// the impl must not shadow or redefine specs).
+function parseProgram(specFile, implFile) {
+  const spec = parseModule(specFile);
+  if (implFile === null || implFile === specFile) return spec;
+  const impl = parseModule(implFile);
+  const merged = {
+    interfaces: new Map(spec.interfaces),
+    functions: new Map(spec.functions),
+    constLits: new Map(spec.constLits),
+  };
+  for (const [k, v] of impl.interfaces) {
+    if (merged.interfaces.has(k)) throw new VerifyError(`duplicate interface ${k} (${specFile} vs ${implFile})`);
+    merged.interfaces.set(k, v);
+  }
+  for (const [k, v] of impl.functions) {
+    if (merged.functions.has(k)) throw new VerifyError(`duplicate function ${k} (${specFile} vs ${implFile})`);
+    merged.functions.set(k, v);
+  }
+  for (const [k, v] of impl.constLits) {
+    if (merged.constLits.has(k)) throw new VerifyError(`duplicate const ${k} (${specFile} vs ${implFile})`);
+    merged.constLits.set(k, v);
+  }
+  return merged;
+}
+
+async function proveFile(ctx, specFile, implFile, tag) {
+  const mod = parseProgram(specFile, implFile);
+  const label = implFile === null || implFile === specFile ? specFile : `${specFile}+${implFile}`;
   const results = [];
   for (const t of TARGETS) {
-    results.push(await proveTarget(ctx, mod, filePath, tag, t));
+    results.push(await proveTarget(ctx, mod, label, tag, t));
   }
   return results;
 }
@@ -354,9 +383,10 @@ async function main() {
   const ctx = new (api.Context)("main");
 
   let failed = 0;
-  const realFile = path.join(REPO, "src", "verified", "domain", "todo.ts");
+  const realSpec = path.join(REPO, "src", "verified", "specs", "todo.ts");
+  const realImpl = path.join(REPO, "src", "verified", "impl", "todo.ts");
   try {
-    const results = await proveFile(ctx, realFile, "real");
+    const results = await proveFile(ctx, realSpec, realImpl, "real");
     for (const r of results) {
       if (r.proved) {
         console.log(`✓ ${r.name} proof (UNSAT: contract holds for all inputs)`);
@@ -387,7 +417,7 @@ async function main() {
     for (const f of entries) {
       const fp = path.join(dir, f);
       try {
-        const results = await proveFile(ctx, fp, `mut_${f.replace(/[^A-Za-z0-9]/g, "_")}`);
+        const results = await proveFile(ctx, fp, null, `mut_${f.replace(/[^A-Za-z0-9]/g, "_")}`);
         const refuted = results.filter((r) => !r.proved);
         if (refuted.length === 0) {
           failed++;

@@ -5,7 +5,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
-import type { Todo } from "../src/verified/domain/todo.js";
+import type { Todo } from "../src/verified/specs/todo.js";
 import type { TodoRepository } from "../src/verified/contracts/todoRepository.js";
 import { createAppServer } from "../src/tcb/http/server.js";
 
