@@ -27,6 +27,7 @@ const REPO = path.resolve(HERE, "..", "..");
 const TARGETS = [
   { impl: "createTodo", pre: "createTodoRequires", post: "createTodoEnsures" },
   { impl: "completeTodo", pre: "completeTodoRequires", post: "completeTodoEnsures" },
+  { impl: "reopenTodo", pre: "reopenTodoRequires", post: "reopenTodoEnsures" },
 ];
 
 class VerifyError extends Error {}
