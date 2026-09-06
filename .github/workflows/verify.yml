@@ -48,7 +48,11 @@ jobs:
         run: |
           gh label create machine-only --description "No human review needed when pipeline is green" --color 0E8A16 || true
           gh pr edit "${{ github.event.pull_request.number }}" --add-label machine-only
-          gh pr merge --auto --squash "${{ github.event.pull_request.number }}"
+          # NOTE: gh-stack PRs reject GraphQL merge/auto-merge; use the async REST merge API.
+          # This step runs only after full verification passed in this job.
+          gh api -X POST "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/merge" \
+            -f merge_method=squash \
+            -f commit_title="${{ github.event.pull_request.title }} (#${{ github.event.pull_request.number }})"
 
       - name: Label human-review PRs
         if: github.event_name == 'pull_request' && steps.gate.outputs.verdict == 'NEEDS_HUMAN'
