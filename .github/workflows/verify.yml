@@ -46,17 +46,44 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          PR="${{ github.event.pull_request.number }}"
           gh label create machine-only --description "No human review needed when pipeline is green" --color 0E8A16 || true
-          gh pr edit "${{ github.event.pull_request.number }}" --add-label machine-only
+          gh pr edit "$PR" --add-label machine-only
+          # gh-stack submits PRs as drafts; graduate this one (it is green here).
+          gh pr ready "$PR"
+          # Stack safety: merging a stacked PR cascades to the whole substack
+          # below it, which may contain unreviewed human PRs. Only auto-merge
+          # when this PR is at the bottom of the remaining stack (position 1)
+          # or not stacked at all. Otherwise leave the label as the signal and
+          # merge bottom-up (see docs/REVIEW_POLICY.md).
+          POS=$(gh api "repos/${{ github.repository }}/pulls/$PR" --jq '.stack.position // 1')
+          if [ "$POS" != "1" ]; then
+            echo "stack position is $POS: waiting for the stack below to merge first."
+            exit 0
+          fi
           # NOTE: gh-stack PRs reject GraphQL merge/auto-merge and the sync
           # REST merge; use the async merge API (PUT .../merge-async).
-          # This step runs only after full verification passed in this job.
-          # Merging a stacked PR merges the whole substack up to it (bottom-up).
-          # gh-stack submits PRs as drafts; graduate this one (it is green here).
-          gh pr ready "${{ github.event.pull_request.number }}"
-          gh api -X PUT "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/merge-async" \
+          UUID=$(gh api -X PUT "repos/${{ github.repository }}/pulls/$PR/merge-async" \
             -f merge_method=squash \
-            -f commit_title="${{ github.event.pull_request.title }} (#${{ github.event.pull_request.number }})"
+            -f commit_title="${{ github.event.pull_request.title }} (#$PR)" \
+            --jq '.details.uuid // empty')
+          if [ -z "$UUID" ]; then
+            echo "merge-async did not return a tracking UUID; check the PR manually."
+            exit 1
+          fi
+          for i in $(seq 1 6); do
+            sleep 10
+            STATUS=$(gh api "repos/${{ github.repository }}/pulls/$PR/merge-async/$UUID" --jq '.status')
+            echo "merge status: $STATUS"
+            if [ "$STATUS" = "merged" ]; then
+              exit 0
+            fi
+            if [ "$STATUS" = "failed" ]; then
+              echo "async merge failed; check the PR manually."
+              exit 1
+            fi
+          done
+          echo "merge still pending; it continues in the background."
 
       - name: Label human-review PRs
         if: github.event_name == 'pull_request' && steps.gate.outputs.verdict == 'NEEDS_HUMAN'
