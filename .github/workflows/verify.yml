@@ -30,7 +30,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git diff --name-only "origin/${{ github.base_ref }}...HEAD" > /tmp/changed.txt
+          # NOTE: github.base_ref resolves to the stack's ultimate base (main)
+          # for stacked PRs; use the event payload's actual PR base instead.
+          git diff --name-only "origin/${{ github.event.pull_request.base.ref }}...HEAD" > /tmp/changed.txt
           OUT=$(docker compose run --rm -v /tmp/changed.txt:/tmp/changed.txt app node tools/review-gate/review-gate.mjs --files /tmp/changed.txt)
           echo "$OUT"
           if echo "$OUT" | grep -q '^GATE: MACHINE_ONLY'; then
