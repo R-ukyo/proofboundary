@@ -44,7 +44,7 @@ function main() {
   const dirA = path.join(base, "a", "verified");
   copyDir(path.join(REPO, "src", "verified"), dirA);
   fs.appendFileSync(
-    path.join(dirA, "domain", "todo.ts"),
+    path.join(dirA, "specs", "todo.ts"),
     '\nimport { z } from "zod";\nexport const _smuggled = z.string();\n',
   );
   check("bare 'zod' import rejected by boundary", run("boundary.mjs", dirA) === false);
@@ -64,7 +64,7 @@ function main() {
   const dirC = path.join(base, "c", "verified");
   copyDir(path.join(REPO, "src", "verified"), dirC);
   fs.appendFileSync(
-    path.join(dirC, "domain", "todo.ts"),
+    path.join(dirC, "specs", "todo.ts"),
     '\nexport const _casted = {} as { id: string };\n',
   );
   check("'as' cast rejected by subset", run("subset.mjs", dirC) === false);

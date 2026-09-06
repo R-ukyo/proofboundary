@@ -3,7 +3,7 @@
 // return stored rows unchanged. This mapping is assumed, not proved.
 
 import type { Pool } from "pg";
-import type { Todo } from "../../verified/domain/todo.js";
+import type { Todo } from "../../verified/specs/todo.js";
 import type { TodoRepository } from "../../verified/contracts/todoRepository.js";
 import { TodoRow } from "../validation/todoSchemas.js";
 

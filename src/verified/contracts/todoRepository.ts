@@ -8,7 +8,7 @@
 // it is given; `findById`/`list` return previously saved values faithfully.
 // That assumption is trusted, not proved.
 
-import type { Todo } from "../domain/todo.js";
+import type { Todo } from "../specs/todo.js";
 
 export interface TodoRepository {
   findById(id: string): Promise<Todo | null>;

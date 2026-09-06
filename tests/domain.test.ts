@@ -1,13 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  completeTodo,
   completeTodoEnsures,
   completeTodoRequires,
-  createTodo,
   createTodoEnsures,
   createTodoRequires,
-} from "../src/verified/domain/todo.js";
+} from "../src/verified/specs/todo.js";
+import { completeTodo, createTodo } from "../src/verified/impl/todo.js";
 
 describe("createTodo (runtime behavior)", () => {
   it("passes title through and starts uncompleted", () => {

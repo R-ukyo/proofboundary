@@ -29,10 +29,14 @@ Contractの意味的妥当性＝Z3（ソルバー必須）。
 
 ## 2. TCB境界
 
-- Verified（`src/verified/`）: `domain/todo.ts`（型＋純粋関数 `createTodo`／`completeTodo`＋
-  仕様関数 `*Requires`／`*Ensures`）、`contracts/todoRepository.ts`（Portのinterfaceのみ、実装なし）、
-  `usecases/*.ts`（Port上のオーケストレーション。I/Oプリミティブなし——Portを引数で受け取る。
-  Port待ちのためのみ `async` を許可）。
+- Verified（`src/verified/`）:
+  - `specs/todo.ts`（型＋ `*Requires`／`*Ensures` 仕様。**人間レビュー対象**。
+    「正しいとは何か」の定義であり、変更は `NEEDS_HUMAN`）
+  - `impl/todo.ts`（純粋関数の本体のみ。**機械検査対象**。証明が通れば人間は読まない。
+    `docs/REVIEW_POLICY.md` 参照）
+  - `contracts/todoRepository.ts`（Portのinterfaceのみ、実装なし）
+  - `usecases/*.ts`（Port上のオーケストレーション。I/Oプリミティブなし——Portを引数で受け取る。
+    Port待ちのためのみ `async` を許可）。
   - 注意: usecasesは境界検査＋型検査＋単体テストの対象であり、SMT証明の範囲は
     呼び出す純粋関数までに限る。SMTの適用範囲は純粋コアである。これはREADMEで限定保証として
     明示し、隠さない。
@@ -49,7 +53,8 @@ Contractの意味的妥当性＝Z3（ソルバー必須）。
 ## 3. 検証機構（型検査の演技ではなく、本物のSMT）
 
 - `tools/verifier/verify.mjs` はTypeScriptコンパイラAPIで**実際の**
-  `src/verified/domain/todo.ts` ソースをパースする。対象の実装関数本体と
+  Verifiedソース（`src/verified/specs/todo.ts`＋`src/verified/impl/todo.ts` の2ファイル。
+  両者の定義結合は重複エラーでfail-closed）をパースする。対象の実装関数本体と
   Requires／Ensures仕様関数本体を取り出し、対応するASTノードを `z3-solver` の項に翻訳する。
 - 理論: Bool＋String＋Int（文字列長）。`title.length` → `Length(title)`。
 - 関数ごとの問い: `Pre(input) ∧ output = Impl(input) ∧ ¬Post(input, output)`。

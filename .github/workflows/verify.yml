@@ -1,0 +1,58 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build app image
+        run: docker compose build app
+
+      - name: Full verification (typecheck, subset, boundary, proofs, tests)
+        run: docker compose run --rm app npm run verify
+
+      - name: Review gate (classify human vs machine change)
+        if: github.event_name == 'pull_request'
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git diff --name-only "origin/${{ github.base_ref }}...HEAD" > /tmp/changed.txt
+          OUT=$(docker compose run --rm -v /tmp/changed.txt:/tmp/changed.txt app node tools/review-gate/review-gate.mjs --files /tmp/changed.txt)
+          echo "$OUT"
+          echo "$OUT" | tail -1 >> "$GITHUB_OUTPUT"
+          if echo "$OUT" | grep -q '^GATE: MACHINE_ONLY'; then
+            echo "verdict=MACHINE_ONLY" >> "$GITHUB_OUTPUT"
+          else
+            echo "verdict=NEEDS_HUMAN" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Label machine-only PRs and enable auto-merge
+        if: github.event_name == 'pull_request' && steps.gate.outputs.verdict == 'MACHINE_ONLY'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create machine-only --description "No human review needed when pipeline is green" --color 0E8A16 || true
+          gh pr edit "${{ github.event.pull_request.number }}" --add-label machine-only
+          gh pr merge --auto --squash "${{ github.event.pull_request.number }}"
+
+      - name: Label human-review PRs
+        if: github.event_name == 'pull_request' && steps.gate.outputs.verdict == 'NEEDS_HUMAN'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create needs-human-review --description "Trust-relevant change: human review required" --color D93F0B || true
+          gh pr edit "${{ github.event.pull_request.number }}" --add-label needs-human-review

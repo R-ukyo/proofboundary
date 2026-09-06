@@ -1,0 +1,13 @@
+# CODEOWNERS: human review is required for trust-relevant paths.
+# src/verified/impl/** and tests/** are intentionally unowned:
+# they are machine-gated (proof + tests in CI). See docs/REVIEW_POLICY.md.
+
+/src/verified/specs/ @R-ukyo
+/src/verified/contracts/ @R-ukyo
+/src/verified/usecases/ @R-ukyo
+/src/tcb/ @R-ukyo
+/tools/ @R-ukyo
+/fixtures/ @R-ukyo
+/.github/ @R-ukyo
+/docs/ @R-ukyo
+/*.md @R-ukyo

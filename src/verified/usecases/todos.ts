@@ -4,8 +4,8 @@
 // NOT import anything outside src/verified/**, must NOT throw, and must NOT
 // duplicate business rules — all state decisions come from domain functions.
 
-import type { NewTodoInput, Todo } from "../domain/todo.js";
-import { completeTodo, createTodo } from "../domain/todo.js";
+import type { NewTodoInput, Todo } from "../specs/todo.js";
+import { completeTodo, createTodo } from "../impl/todo.js";
 import type { TodoRepository } from "../contracts/todoRepository.js";
 
 export interface NotFound {

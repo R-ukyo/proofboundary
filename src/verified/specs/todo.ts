@@ -1,9 +1,11 @@
-// VERIFIED CODE — Tier 1 (SMT-proved pure core).
+// VERIFIED CODE — Tier 1 specs (HUMAN-REVIEWED).
 //
-// This file must stay inside the Verified subset (see DESIGN.md):
-// pure functions, single return, no imports, no I/O, no any/as/!/throw/loops.
-// The prover (tools/verifier/verify.mjs) parses THESE function bodies and
-// translates them to Z3. Any out-of-subset syntax fails verification closed.
+// This file defines WHAT must hold: types + Requires/Ensures.
+// Human reviewers read THIS file, not the implementation.
+// The prover (tools/verifier/verify.mjs) loads these specs together with
+// src/verified/impl/todo.ts and proves the impl against them for all inputs.
+//
+// Changing this file changes the meaning of "correct" -> NEEDS_HUMAN review.
 
 export interface Todo {
   id: string;
@@ -26,10 +28,6 @@ export function createTodoEnsures(input: NewTodoInput, output: Todo): boolean {
   return output.id === input.id && output.title === input.title && output.completed === false;
 }
 
-export function createTodo(input: NewTodoInput): Todo {
-  return { id: input.id, title: input.title, completed: false };
-}
-
 // --- completeTodo -----------------------------------------------------------
 
 export function completeTodoRequires(todo: Todo): boolean {
@@ -38,8 +36,4 @@ export function completeTodoRequires(todo: Todo): boolean {
 
 export function completeTodoEnsures(input: Todo, output: Todo): boolean {
   return output.id === input.id && output.title === input.title && output.completed === true;
-}
-
-export function completeTodo(todo: Todo): Todo {
-  return { id: todo.id, title: todo.title, completed: true };
 }
