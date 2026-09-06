@@ -33,7 +33,6 @@ jobs:
           git diff --name-only "origin/${{ github.base_ref }}...HEAD" > /tmp/changed.txt
           OUT=$(docker compose run --rm -v /tmp/changed.txt:/tmp/changed.txt app node tools/review-gate/review-gate.mjs --files /tmp/changed.txt)
           echo "$OUT"
-          echo "$OUT" | tail -1 >> "$GITHUB_OUTPUT"
           if echo "$OUT" | grep -q '^GATE: MACHINE_ONLY'; then
             echo "verdict=MACHINE_ONLY" >> "$GITHUB_OUTPUT"
           else
