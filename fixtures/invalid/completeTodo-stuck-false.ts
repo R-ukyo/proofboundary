@@ -35,3 +35,15 @@ export function completeTodoEnsures(input: Todo, output: Todo): boolean {
 export function completeTodo(todo: Todo): Todo {
   return { id: todo.id, title: todo.title, completed: false };
 }
+
+export function reopenTodoRequires(todo: Todo): boolean {
+  return todo.completed === true;
+}
+
+export function reopenTodoEnsures(input: Todo, output: Todo): boolean {
+  return output.id === input.id && output.title === input.title && output.completed === false;
+}
+
+export function reopenTodo(todo: Todo): Todo {
+  return { id: todo.id, title: todo.title, completed: false };
+}

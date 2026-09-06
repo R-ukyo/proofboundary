@@ -1,9 +1,5 @@
-// VERIFIED CODE — Tier 1 (SMT-proved pure core).
-//
-// This file must stay inside the Verified subset (see DESIGN.md):
-// pure functions, single return, no imports, no I/O, no any/as/!/throw/loops.
-// The prover (tools/verifier/verify.mjs) parses THESE function bodies and
-// translates them to Z3. Any out-of-subset syntax fails verification closed.
+// INVALID fixture (negative control): reopenTodo keeps the flag set.
+// The prover MUST refute reopenTodo here with a counterexample.
 
 export interface Todo {
   id: string;
@@ -15,8 +11,6 @@ export interface NewTodoInput {
   id: string;
   title: string;
 }
-
-// --- createTodo -------------------------------------------------------------
 
 export function createTodoRequires(input: NewTodoInput): boolean {
   return input.title.length >= 1 && input.title.length <= 200;
@@ -30,8 +24,6 @@ export function createTodo(input: NewTodoInput): Todo {
   return { id: input.id, title: input.title, completed: false };
 }
 
-// --- completeTodo -----------------------------------------------------------
-
 export function completeTodoRequires(todo: Todo): boolean {
   return todo.completed === false;
 }
@@ -44,8 +36,6 @@ export function completeTodo(todo: Todo): Todo {
   return { id: todo.id, title: todo.title, completed: true };
 }
 
-// --- reopenTodo -------------------------------------------------------------
-
 export function reopenTodoRequires(todo: Todo): boolean {
   return todo.completed === true;
 }
@@ -55,5 +45,5 @@ export function reopenTodoEnsures(input: Todo, output: Todo): boolean {
 }
 
 export function reopenTodo(todo: Todo): Todo {
-  return { id: todo.id, title: todo.title, completed: false };
+  return { id: todo.id, title: todo.title, completed: true };
 }

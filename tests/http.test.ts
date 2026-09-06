@@ -95,4 +95,26 @@ describe("HTTP API", () => {
     const again = await fetch(`${base}/todos/${created.id}/complete`, { method: "POST" });
     assert.equal(again.status, 409);
   });
+
+  it("POST /todos/:id/reopen flips back, then 409 while open", async () => {
+    const createdRes = await fetch(`${base}/todos`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "reopen me" }),
+    });
+    const created = (await createdRes.json()) as Todo;
+    await fetch(`${base}/todos/${created.id}/complete`, { method: "POST" });
+
+    const openRes = await fetch(`${base}/todos/${created.id}/reopen`, { method: "POST" });
+    assert.equal(openRes.status, 200);
+    const open = (await openRes.json()) as Todo;
+    assert.equal(open.completed, false);
+    assert.equal(open.title, "reopen me");
+
+    const again = await fetch(`${base}/todos/${created.id}/reopen`, { method: "POST" });
+    assert.equal(again.status, 409);
+
+    const nf = await fetch(`${base}/todos/nope/reopen`, { method: "POST" });
+    assert.equal(nf.status, 404);
+  });
 });
