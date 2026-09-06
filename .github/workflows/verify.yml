@@ -52,6 +52,8 @@ jobs:
           # REST merge; use the async merge API (PUT .../merge-async).
           # This step runs only after full verification passed in this job.
           # Merging a stacked PR merges the whole substack up to it (bottom-up).
+          # gh-stack submits PRs as drafts; graduate this one (it is green here).
+          gh pr ready "${{ github.event.pull_request.number }}"
           gh api -X PUT "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/merge-async" \
             -f merge_method=squash \
             -f commit_title="${{ github.event.pull_request.title }} (#${{ github.event.pull_request.number }})"
