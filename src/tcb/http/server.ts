@@ -9,6 +9,7 @@ import {
   completeTodoUseCase,
   createTodoUseCase,
   listTodosUseCase,
+  reopenTodoUseCase,
 } from "../../verified/usecases/todos.js";
 import { CreateTodoBody, TodoIdParam } from "../validation/todoSchemas.js";
 
@@ -91,6 +92,26 @@ async function handleRequest(
         return;
       }
       sendJson(res, 409, { error: "already-completed" });
+      return;
+    }
+    sendJson(res, 200, result);
+    return;
+  }
+
+  if (method === "POST" && url.startsWith("/todos/") && url.endsWith("/reopen")) {
+    const idSegment: string = url.slice("/todos/".length, -"/reopen".length);
+    const idCheck = TodoIdParam.safeParse(idSegment);
+    if (!idCheck.success) {
+      sendJson(res, 400, { error: "invalid-id" });
+      return;
+    }
+    const result = await reopenTodoUseCase(repo, idCheck.data);
+    if (typeof result === "object" && result !== null && "kind" in result) {
+      if (result.kind === "not-found") {
+        sendJson(res, 404, { error: "not-found" });
+        return;
+      }
+      sendJson(res, 409, { error: "already-open" });
       return;
     }
     sendJson(res, 200, result);

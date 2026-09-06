@@ -25,6 +25,7 @@ curl -X POST localhost:3000/todos -H 'content-type: application/json' -d '{"titl
 curl localhost:3000/todos
 ID=<上で得たid>
 curl -X POST localhost:3000/todos/$ID/complete
+curl -X POST localhost:3000/todos/$ID/reopen
 ```
 
 ## アーキテクチャ
@@ -115,10 +116,10 @@ tools/metrics/metrics.mjs         # LOC計測
 ## 信頼サイズの測定（`npm run metrics`）
 
 ```text
-Application code: 239 LOC
-Verified:          70 LOC
-TCB:              169 LOC
-TCB ratio:         70.7%
+Application code: 286 LOC
+Verified:          97 LOC
+TCB:              189 LOC
+TCB ratio:         66.1%
 ```
 
 3エンドポイントの玩具規模では比率が逆転して見えます。これはTCBがほぼ**固定の
@@ -138,7 +139,7 @@ TCB ratio:         70.7%
    翻訳はfail-closedです。モデル化できないものは黙って通さず必ずエラーにします。
 3. **TCBに最終的に何が残ったか。** HTTPパース／ルーティング、zod検証、pgアダプタ＋DDL、
    プロセス配線、そして検証器ツールチェーン自体です。
-4. **TCB比率は。** 70.7%（固定費支配。上記参照）。
+4. **TCB比率は。** 66.1%（固定費支配。上記参照）。
 5. **Verified Code変更時に人間がdiffを読まなくてよいか。** Tier 1の純粋関数についてははい、
    **ただし**人間はRequires/Ensuresの仕様を引き続きレビューします。証明は仕様に対する相対的なものだからです。
    これが正しい分業です。人間は「何が成り立つべきか」をレビューし、機械は「全入力で成り立つこと」を検査します。

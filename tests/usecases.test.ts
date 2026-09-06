@@ -6,6 +6,7 @@ import {
   completeTodoUseCase,
   createTodoUseCase,
   listTodosUseCase,
+  reopenTodoUseCase,
 } from "../src/verified/usecases/todos.js";
 
 class MemoryRepo implements TodoRepository {
@@ -57,5 +58,24 @@ describe("todo use cases", () => {
     await completeTodoUseCase(repo, "2");
     const again = await completeTodoUseCase(repo, "2");
     assert.deepEqual(again, { kind: "already-completed" });
+  });
+
+  it("complete -> reopen round-trips the flag with fields intact", async () => {
+    const repo = new MemoryRepo();
+    await createTodoUseCase(repo, { id: "3", title: "roundtrip" });
+    await completeTodoUseCase(repo, "3");
+    const open = await reopenTodoUseCase(repo, "3");
+    assert.ok(!("kind" in (open as object)));
+    const todo = open as Todo;
+    assert.equal(todo.id, "3");
+    assert.equal(todo.title, "roundtrip");
+    assert.equal(todo.completed, false);
+  });
+
+  it("reopening an open todo yields already-open; unknown yields not-found", async () => {
+    const repo = new MemoryRepo();
+    await createTodoUseCase(repo, { id: "4", title: "open" });
+    assert.deepEqual(await reopenTodoUseCase(repo, "4"), { kind: "already-open" });
+    assert.deepEqual(await reopenTodoUseCase(repo, "missing"), { kind: "not-found" });
   });
 });
