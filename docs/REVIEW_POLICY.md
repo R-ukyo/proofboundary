@@ -5,7 +5,7 @@
 変更ファイルのパスだけを見て、次のどちらかに分類します。
 内容の難しさや差分の大きさは判断材料にしません。
 
-- **MACHINE_ONLY**: `src/verified/impl/**` と `tests/**` のみ。
+- **MACHINE_ONLY**: `src/verified/impl/**`、`src/tcb/validation/generated/**`、`tests/**` のみ。
   パイプライン（`npm run verify`）が緑なら、人間は読まずにマージしてよい。
 - **NEEDS_HUMAN**: それ以外のファイルを1つでも含む変更。
   人間レビューが必須。`CODEOWNERS` が対象者を指名する。
@@ -17,7 +17,12 @@
   仕様は `src/verified/specs/**` として別ファイルにあり、必ずNEEDS_HUMANになります。
 - `src/verified/impl/**` が仕様をすり替えることは構造的にできません。
   証明器はspecs側の `*Requires`／`*Ensures` を正として読み、impl側の同名再定義は
-  重複エラー（fail-closed）で落とします。
+  重複エラー（fail-closed）で落とします。証明対象の検出も命名規則による自動検出であり、
+  TARGETSのような手登録（＝見落とし得るTCB設定）は存在しません。
+- `src/tcb/validation/generated/**` は `Requires` から生成されるため、
+  バリデータとドメイン述語の対応は構成上一致します。CIの鮮度検査がdriftを検出します。
+  生成器自体（`tools/codegen/`）はTCBであり人間レビュー対象ですが、変更頻度は低く、
+  機能追加では変わりません。
 - `tests/**` は「実行されるもの」であり「信頼するもの」ではありません。
   間違ったテストは正しい実装に対して赤になります。Tier 1の意味的 backstop は
   常にZ3証明です。

@@ -98,7 +98,8 @@ UNSAT＝全入力で成立、SAT＝モデルから得た入出力値を countere
 
 ```text
 src/tcb/http/server.ts            # ルーティング、ボディパース、状態対応付け（業務規則なし）
-src/tcb/validation/todoSchemas.ts # zod境界: unknown → ドメイン値
+src/tcb/validation/todoSchemas.ts # zod境界（手書き部分: 輸送・保存関心のみ）
+src/tcb/validation/generated/    # 生成zod（Requires由来。鮮度検査付きで機械扱い）
 src/tcb/db/pgTodoRepository.ts    # Port実装（対応付けは信頼対象であり証明対象外）
 src/tcb/db/schema.ts              # DDL
 src/tcb/runtime/main.ts           # 環境変数、プール、listen
@@ -107,6 +108,7 @@ tools/checks/subset.mjs           # サブセット検査器（信頼）
 tools/checks/boundary.mjs         # 境界検査器（信頼）
 tools/checks/selftest.mjs         # 検査器セルフテスト
 tools/verify-all.mjs              # パイプライン配線
+tools/codegen/validators.mjs      # Requires→zod生成器（信頼。変更は稀）
 tools/review-gate/review-gate.mjs # 変更分類（MACHINE_ONLY/NEEDS_HUMAN）
 tools/metrics/metrics.mjs         # LOC計測
 .github/workflows/verify.yml     # CI（フル検証＋ゲート＋ラベル＋auto-merge）
@@ -116,10 +118,10 @@ tools/metrics/metrics.mjs         # LOC計測
 ## 信頼サイズの測定（`npm run metrics`）
 
 ```text
-Application code: 286 LOC
+Application code: 288 LOC
 Verified:          97 LOC
-TCB:              189 LOC
-TCB ratio:         66.1%
+TCB:              191 LOC
+TCB ratio:         66.3%
 ```
 
 3エンドポイントの玩具規模では比率が逆転して見えます。これはTCBがほぼ**固定の
@@ -139,12 +141,12 @@ TCB ratio:         66.1%
    翻訳はfail-closedです。モデル化できないものは黙って通さず必ずエラーにします。
 3. **TCBに最終的に何が残ったか。** HTTPパース／ルーティング、zod検証、pgアダプタ＋DDL、
    プロセス配線、そして検証器ツールチェーン自体です。
-4. **TCB比率は。** 66.1%（固定費支配。上記参照）。
+4. **TCB比率は。** 66.3%（固定費支配。上記参照）。
 5. **Verified Code変更時に人間がdiffを読まなくてよいか。** Tier 1の純粋関数についてははい、
    **ただし**人間はRequires/Ensuresの仕様を引き続きレビューします。証明は仕様に対する相対的なものだからです。
    これが正しい分業です。人間は「何が成り立つべきか」をレビューし、機械は「全入力で成り立つこと」を検査します。
-6. **まだ人間が確認する必要があるものは。** 仕様、TCBファイル、スキーマと述語の対応
-  （zodの境界値と `Requires`）、Portの仮定です。
+6. **まだ人間が確認する必要があるものは。** 仕様、TCBの手書き部分、Portの仮定です。
+  zod境界値と `Requires` の対応は生成＋鮮度検査に移管済みのため目視不要です。
 7. **DB Contractの仮定はどの程度危険か。** 封じ込められています。アダプタは分岐なし約36行の
    素直な対応付けであり、危険な部分（SQL生成）は `pg` のパラメータ束縛に委譲し、読み出し行形状は
    zodで再検証しています。

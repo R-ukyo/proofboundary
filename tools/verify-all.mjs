@@ -7,6 +7,7 @@ const steps = [
   { label: "Type check", cmd: "npm", args: ["run", "build"] },
   { label: "Verified subset", cmd: "node", args: ["tools/checks/subset.mjs"] },
   { label: "Import boundaries", cmd: "node", args: ["tools/checks/boundary.mjs"] },
+  { label: "Generated validators", cmd: "node", args: ["tools/codegen/validators.mjs", "--check"] },
   { label: "Boundary self-test", cmd: "node", args: ["tools/checks/selftest.mjs"] },
   { label: "Contract verification", cmd: "node", args: ["tools/verifier/verify.mjs"] },
   { label: "Tests", cmd: "npm", args: ["test"] },
@@ -28,6 +29,7 @@ const find = (l) => results.find((r) => r.label === l)?.ok === true;
 console.log(`${mark(find("Type check"))} Type check`);
 console.log(`${mark(find("Verified subset"))} Verified subset`);
 console.log(`${mark(find("Import boundaries"))} Import boundaries`);
+console.log(`${mark(find("Generated validators"))} Generated validators fresh`);
 console.log(`${mark(find("Boundary self-test"))} Boundary self-test (checkers reject violations)`);
 console.log(`${mark(find("Contract verification"))} Contract proofs + mutation rejection`);
 console.log(`${mark(find("Tests"))} Tests`);
