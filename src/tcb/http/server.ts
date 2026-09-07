@@ -11,7 +11,8 @@ import {
   listTodosUseCase,
   reopenTodoUseCase,
 } from "../../verified/usecases/todos.js";
-import { CreateTodoBody, TodoIdParam } from "../validation/todoSchemas.js";
+import { CreateTodoBody } from "../validation/generated/createTodoBody.js";
+import { TodoIdParam } from "../validation/todoSchemas.js";
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const payload: string = JSON.stringify(body);

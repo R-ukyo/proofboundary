@@ -24,11 +24,21 @@ const z3pkg = require("z3-solver");
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
 
-const TARGETS = [
-  { impl: "createTodo", pre: "createTodoRequires", post: "createTodoEnsures" },
-  { impl: "completeTodo", pre: "completeTodoRequires", post: "completeTodoEnsures" },
-  { impl: "reopenTodo", pre: "reopenTodoRequires", post: "reopenTodoEnsures" },
-];
+// Proof targets are DISCOVERED, not registered: any base name N with
+// NRequires + NEnsures + N (impl) in the program becomes a target.
+// A Requires/Ensures pair without its impl fails closed ("missing function").
+// This removes a manual TCB step: adding a function needs no verifier edit.
+function discoverTargets(mod) {
+  const names = new Set();
+  for (const name of mod.functions.keys()) {
+    for (const suffix of ["Requires", "Ensures"]) {
+      if (name.endsWith(suffix) && name.length > suffix.length) {
+        names.add(name.slice(0, -suffix.length));
+      }
+    }
+  }
+  return [...names].sort().map((impl) => ({ impl, pre: `${impl}Requires`, post: `${impl}Ensures` }));
+}
 
 class VerifyError extends Error {}
 
@@ -291,8 +301,11 @@ async function proveFile(ctx, specFile, implFile, tag) {
   const mod = parseProgram(specFile, implFile);
   const label = implFile === null || implFile === specFile ? specFile : `${specFile}+${implFile}`;
   const results = [];
-  for (const t of TARGETS) {
+  for (const t of discoverTargets(mod)) {
     results.push(await proveTarget(ctx, mod, label, tag, t));
+  }
+  if (results.length === 0) {
+    throw new VerifyError(`${label}: no proof targets discovered (no *Requires/*Ensures pairs)`);
   }
   return results;
 }

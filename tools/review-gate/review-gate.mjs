@@ -2,8 +2,8 @@
 //
 // Classifies a change set into MACHINE_ONLY (no human review needed if the
 // pipeline is green) vs NEEDS_HUMAN. The rule mirrors docs/REVIEW_POLICY.md:
-// only src/verified/impl/** and tests/** are machine-gated; every other path
-// carries trust (specs, usecases, TCB, tools, fixtures, docs, CI itself).
+// only src/verified/impl/**, generated validators, and tests/** are machine-gated;
+// every other path carries trust (specs, usecases, TCB, tools, fixtures, docs, CI itself).
 //
 // Usage:
 //   node tools/review-gate/review-gate.mjs --files <newline-separated-paths>
@@ -17,7 +17,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import fs from "node:fs";
 
-const MACHINE_RE = [/^src\/verified\/impl\//, /^tests\//];
+const MACHINE_RE = [/^src\/verified\/impl\//, /^src\/tcb\/validation\/generated\//, /^tests\//];
 
 function classify(p) {
   const norm = p.replace(/\\/g, "/").replace(/^\.\//, "");
@@ -72,7 +72,7 @@ function main() {
     if (c === "human") human.push(f);
   }
   if (human.length === 0) {
-    console.log("GATE: MACHINE_ONLY (impl+tests only; merge when pipeline is green)");
+    console.log("GATE: MACHINE_ONLY (impl + generated + tests only; merge when pipeline is green)");
   } else {
     console.log(`GATE: NEEDS_HUMAN (${human.length} trust-relevant file(s))`);
   }

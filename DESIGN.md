@@ -73,6 +73,15 @@ Contractの意味的妥当性＝Z3（ソルバー必須）。
 - 検討したが不採用: システムZ3＋SMT-LIBファイル＋Python方式。イメージ肥大化に加え
   `npm run verify` 単一コマンドの筋が悪く、同等の決定能力しか得られないため。
 
+## 4b. 生成による対応付け（バリデータ）
+
+- HTTPボディ用zodスキーマは手書きしない。`tools/codegen/validators.mjs` が
+  `*Input` 型を守る `Requires` の長さ境界値から生成する（現状 `CreateTodoBody`）。
+  対応の正しさは目視ではなく構成で保証し、`npm run verify` 内の鮮度検査（`--check`）が
+  driftを検出する。生成不能な述語があればfail-closedでエラーにする。
+- 証明対象も手登録しない。`*Requires`／`*Ensures`／同名実装の組を命名規則で自動検出する。
+  関数追加時に検証器の編集は不要であり、登録漏れ（＝証明されない関数の混入）は構造的に起きない。
+
 ## 5. Docker構成
 
 - `Dockerfile`: `node:20-slim` 基盤、`npm ci`、リポジトリ複写、TSコンパイル。
